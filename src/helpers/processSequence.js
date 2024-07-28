@@ -14,38 +14,64 @@
  * Иногда промисы от API будут приходить в состояние rejected, (прямо как и API в реальной жизни)
  * Ответ будет приходить в поле {result}
  */
- import Api from '../tools/api';
+import Api from "../tools/api";
+import { compose, __, curry, test, allPass, length, gt, lt, ifElse, andThen, prop, composeWith, tap, pipe, otherwise } from 'ramda';
 
- const api = new Api();
+// API
+const api = new Api();
+const getApi = api.get("https://api.tech/numbers/base");
+const getFrom10To2 = (num) => getApi({ from: 10, to: 2, number: num });
+const getAnimalById = (id) => api.get(`https://animals.tech/${id}`, null);
 
- /**
-  * Я – пример, удали меня
-  */
- const wait = time => new Promise(resolve => {
-     setTimeout(resolve, time);
- })
+// Validation
+const longerThanN = (n) => compose(gt(__, n), length);
+const shorterThanN = (n) => compose(lt(__, n), length);
+const longerThan2 = longerThanN(2);
+const shorterThan10 = shorterThanN(10);
 
- const processSequence = ({value, writeLog, handleSuccess, handleError}) => {
-     /**
-      * Я – пример, удали меня
-      */
-     writeLog(value);
+const isPositive = (number) => parseFloat(number) > 0;
+const isDecimalNumber = test(/^[0-9]+(\.[0-9]+)?$/);
 
-     api.get('https://api.tech/numbers/base', {from: 2, to: 10, number: '01011010101'}).then(({result}) => {
-         writeLog(result);
-     });
+const isStrValid = allPass([
+    shorterThan10,
+    longerThan2,
+    isPositive,
+    isDecimalNumber,
+])
 
-     wait(2500).then(() => {
-         writeLog('SecondLog')
+// Transformation
+const toNumber = (str) => Number(str);
+const roundToNearest = Math.round;
 
-         return wait(1500);
-     }).then(() => {
-         writeLog('ThirdLog');
+const pow = (n, num) => Math.pow(num, n);
+const curryPow = curry(pow);
+const pow2 = curryPow(2);
 
-         return wait(400);
-     }).then(() => {
-         handleSuccess('Done');
-     });
- }
+const remainder = (d, num) => num % d;
+const curryRemainder = curry(remainder);
+const remainder3 = curryRemainder(3);
+
+const chainAsync = (fn, res) => res.then(fn);
+
+const processSequence = ({ value, writeLog, handleSuccess, handleError }) => {
+    const writeLogAndReturn = tap(writeLog);
+    const onError = otherwise(handleError);
+
+    const step1 = writeLogAndReturn;
+    const step2 = ifElse(
+        isStrValid,
+        (value) => Promise.resolve(value),
+        () => Promise.reject('ValidationError'),
+    );
+    const step3 = compose(writeLogAndReturn, roundToNearest, toNumber);
+    const step4 = composeWith(chainAsync, [writeLogAndReturn, prop("result"), getFrom10To2]);
+    const step5 = compose(writeLogAndReturn, length);
+    const step6 = compose(writeLogAndReturn, pow2);
+    const step7 = compose(writeLogAndReturn, remainder3);
+    const step8 = composeWith(chainAsync, [prop("result"), getAnimalById]);
+    const step9 = handleSuccess;
+
+    pipe(step1, step2, andThen(step3), andThen(step4), andThen(step5), andThen(step6), andThen(step7), andThen(step8), andThen(step9), onError)(value);
+};
 
 export default processSequence;
